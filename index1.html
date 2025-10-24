@@ -248,11 +248,9 @@
                 dropzones: []
             };
             
-            // Get links in the main container
             const linksContainer = document.getElementById('links-container');
             state.linksContainer = Array.from(linksContainer.querySelectorAll('.draggable-image')).map(el => el.getAttribute('data-link'));
             
-            // Get links in each dropzone
             const dropzones = document.querySelectorAll('.dropzone');
             dropzones.forEach(zone => {
                 const links = Array.from(zone.querySelectorAll('.draggable-image')).map(el => el.getAttribute('data-link'));
@@ -266,16 +264,14 @@
         }
 
         function saveState() {
-            // Remove any states after current index if we're not at the end
             if (historyIndex < history.length - 1) {
                 history = history.slice(0, historyIndex + 1);
             }
             
             const currentState = getFullState();
-            history.push(JSON.parse(JSON.stringify(currentState))); // Deep copy
+            history.push(JSON.parse(JSON.stringify(currentState)));
             historyIndex++;
             
-            // Maintain maximum history size
             if (history.length > MAX_HISTORY_SIZE) {
                 history.shift();
                 historyIndex--;
@@ -289,17 +285,14 @@
             const linksContainer = document.getElementById('links-container');
             const dropzones = document.querySelectorAll('.dropzone');
             
-            // Clear everything
             linksContainer.innerHTML = '';
             dropzones.forEach(zone => zone.innerHTML = '');
             
-            // Restore links container
             state.linksContainer.forEach(link => {
                 const linkDiv = createLinkDiv(link);
                 linksContainer.appendChild(linkDiv);
             });
             
-            // Restore dropzones
             state.dropzones.forEach(zoneState => {
                 const dropzone = document.querySelector(`.dropzone[data-group-id="${zoneState.id}"]`);
                 if (dropzone) {
@@ -331,32 +324,48 @@
                 return;
             }
 
-            const links = input.split('\n').filter(link => link.trim() !== '');
-            allLinksArray = links;
+            // Limpiar y validar links
+            const links = input.split('\n')
+                .map(link => link.trim().replace(/\s+/g, '')) // Eliminar todos los espacios
+                .filter(link => link !== '' && link.startsWith('http')); // Solo links válidos
+            
+            // Detectar duplicados
+            const uniqueLinks = [...new Set(links)];
+            if (uniqueLinks.length !== links.length) {
+                const duplicates = links.length - uniqueLinks.length;
+                if (!confirm(`Se encontraron ${duplicates} links duplicados. ¿Deseas continuar eliminando los duplicados?`)) {
+                    return;
+                }
+            }
+            
+            allLinksArray = uniqueLinks;
 
             const linksContainer = document.getElementById('links-container');
             linksContainer.innerHTML = '';
 
-            links.forEach(link => {
+            uniqueLinks.forEach(link => {
                 const linkDiv = createLinkDiv(link);
                 linksContainer.appendChild(linkDiv);
             });
 
-            // Reset history
             history = [];
             historyIndex = -1;
             saveState();
 
             rebindEventListeners();
+            
+            console.log(`✅ Cargados ${uniqueLinks.length} links únicos y válidos`);
         }
 
         function createLinkDiv(link) {
             const linkDiv = document.createElement('div');
             linkDiv.className = 'draggable-image';
-            linkDiv.setAttribute('data-link', link.trim());
+            // LIMPIAR el link de espacios, tabs y otros caracteres
+            const cleanLink = link.trim().replace(/\s+/g, '');
+            linkDiv.setAttribute('data-link', cleanLink);
 
             const img = document.createElement('img');
-            img.src = link.trim();
+            img.src = cleanLink;
             img.alt = 'Imagen';
             img.addEventListener('error', () => {
                 linkDiv.classList.add('error');
@@ -381,13 +390,11 @@
         function addClickToPasteListeners() {
             const dropzones = document.querySelectorAll('.dropzone');
             
-            // Remove old listeners by cloning
             dropzones.forEach(zone => {
                 const newZone = zone.cloneNode(true);
                 zone.parentNode.replaceChild(newZone, zone);
             });
             
-            // Add new listeners
             document.querySelectorAll('.dropzone').forEach(zone => {
                 zone.addEventListener('mouseover', () => {
                     const selectedItems = document.querySelectorAll('.draggable-image.selected');
@@ -501,13 +508,11 @@
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
             
-            // Remove old listeners
             const newUndoBtn = undoBtn.cloneNode(true);
             const newRedoBtn = redoBtn.cloneNode(true);
             undoBtn.parentNode.replaceChild(newUndoBtn, undoBtn);
             redoBtn.parentNode.replaceChild(newRedoBtn, redoBtn);
             
-            // Add new listeners
             document.getElementById('undoBtn').addEventListener('click', () => {
                 if (historyIndex > 0) {
                     historyIndex--;
@@ -529,33 +534,75 @@
             copyAllBtn.parentNode.replaceChild(newCopyAllBtn, copyAllBtn);
             
             document.getElementById('copyAllBtn').addEventListener('click', () => {
-                const dropzones = document.querySelectorAll('.dropzone');
                 let allGroupedLinks = [];
+                let debugInfo = [];
+                let totalLinks = 0;
 
-                dropzones.forEach(zone => {
-                    const linksInGroup = zone.querySelectorAll('.draggable-image');
-                    const linksArray = Array.from(linksInGroup).map(linkDiv => linkDiv.getAttribute('data-link'));
-                    if (linksArray.length > 0) {
-                        allGroupedLinks.push(linksArray.join(','));
+                // Iterar por cada uno de los 396 grupos
+                for (let i = 1; i <= 396; i++) {
+                    const dropzone = document.querySelector(`.dropzone[data-group-id="${i}"]`);
+                    if (dropzone) {
+                        // Obtener todas las imágenes del grupo actual EN EL ORDEN VISUAL
+                        const linksInGroup = Array.from(dropzone.querySelectorAll('.draggable-image'));
+                        
+                        // Si el grupo tiene imágenes, extraer los links tal como están
+                        if (linksInGroup.length > 0) {
+                            const linksArray = linksInGroup.map(linkDiv => {
+                                const link = linkDiv.getAttribute('data-link');
+                                // Validar que el link no esté vacío o corrupto
+                                if (!link || !link.startsWith('http')) {
+                                    console.warn(`⚠️ Link inválido en Grupo ${i}:`, link);
+                                    return null;
+                                }
+                                return link;
+                            }).filter(link => link !== null); // Eliminar links inválidos
+                            
+                            if (linksArray.length > 0) {
+                                // USAR TABS PARA SEPARAR (para que en Sheets vayan a columnas diferentes)
+                                allGroupedLinks.push(linksArray.join('\t'));
+                                debugInfo.push(`Grupo ${i}: ${linksArray.length} imágenes`);
+                                totalLinks += linksArray.length;
+                            } else {
+                                allGroupedLinks.push('');
+                            }
+                        } else {
+                            // Si el grupo está vacío, agregar línea vacía
+                            allGroupedLinks.push('');
+                        }
                     }
-                });
+                }
 
+                // Mostrar información de debug
+                console.log('=== DEBUG INFO ===');
+                console.log(`Total de grupos con contenido: ${debugInfo.length}`);
+                console.log(`Total de links a copiar: ${totalLinks}`);
+                debugInfo.slice(0, 5).forEach(info => console.log(info));
+                if (debugInfo.length > 5) {
+                    console.log(`... y ${debugInfo.length - 5} grupos más`);
+                }
+
+                // Unir todos los grupos con saltos de línea
                 const resultString = allGroupedLinks.join('\n');
-                if (resultString) {
-                    copyToClipboard(resultString, 'Todos los links de los grupos copiados ✅');
+                
+                if (resultString.trim()) {
+                    copyToClipboard(resultString, `✅ ${totalLinks} links de ${debugInfo.length} grupos copiados (Listos para Sheets)`);
                 } else {
                     alert('No hay productos en los grupos para copiar.');
                 }
             });
 
+            // Copiar grupo individual
             document.querySelectorAll('.copy-group-btn').forEach(button => {
                 button.addEventListener('click', (e) => {
                     const dropzone = e.target.parentElement.querySelector('.dropzone');
-                    const linksInGroup = dropzone.querySelectorAll('.draggable-image');
-                    const linksArray = Array.from(linksInGroup).map(linkDiv => linkDiv.getAttribute('data-link'));
-                    const resultString = linksArray.join(',');
-
-                    if (resultString) {
+                    const linksInGroup = Array.from(dropzone.querySelectorAll('.draggable-image'));
+                    
+                    if (linksInGroup.length > 0) {
+                        // Extraer links en el orden visual
+                        const linksArray = linksInGroup.map(linkDiv => linkDiv.getAttribute('data-link'));
+                        // USAR TABS PARA SEPARAR (para Sheets)
+                        const resultString = linksArray.join('\t');
+                        
                         copyToClipboard(resultString);
                     } else {
                         alert("No hay enlaces en este grupo para copiar.");
@@ -568,18 +615,49 @@
             document.querySelectorAll('.send-to-start-btn').forEach(button => {
                 button.addEventListener('click', (e) => {
                     const dropzone = e.target.parentElement.querySelector('.dropzone');
-                    const linksInGroup = dropzone.querySelectorAll('.draggable-image');
+                    const linksInGroup = Array.from(dropzone.querySelectorAll('.draggable-image'));
                     const linksContainer = document.getElementById('links-container');
                     
                     if (linksInGroup.length > 0) {
-                        // Move all items back to the links container
-                        Array.from(linksInGroup).forEach(linkDiv => {
+                        // Extraer los links y sus índices originales
+                        const linksWithIndices = linksInGroup.map(linkDiv => {
+                            const link = linkDiv.getAttribute('data-link');
+                            const originalIndex = allLinksArray.indexOf(link);
+                            return { linkDiv, link, originalIndex };
+                        });
+                        
+                        // Ordenar por índice original
+                        linksWithIndices.sort((a, b) => a.originalIndex - b.originalIndex);
+                        
+                        // Remover del grupo
+                        linksInGroup.forEach(linkDiv => {
                             linkDiv.classList.remove('selected', 'active');
-                            linksContainer.appendChild(linkDiv);
+                            linkDiv.remove();
+                        });
+                        
+                        // Insertar cada elemento en su posición correcta
+                        linksWithIndices.forEach(({ linkDiv, originalIndex }) => {
+                            let inserted = false;
+                            const currentLinks = Array.from(linksContainer.querySelectorAll('.draggable-image'));
+                            
+                            for (let i = 0; i < currentLinks.length; i++) {
+                                const existingLink = currentLinks[i].getAttribute('data-link');
+                                const existingIndex = allLinksArray.indexOf(existingLink);
+                                
+                                if (originalIndex < existingIndex) {
+                                    linksContainer.insertBefore(linkDiv, currentLinks[i]);
+                                    inserted = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!inserted) {
+                                linksContainer.appendChild(linkDiv);
+                            }
                         });
                         
                         saveState();
-                        alert("Todos los productos del grupo han sido enviados al principio.");
+                        alert("Todos los productos del grupo han sido enviados al principio en su orden original.");
                     } else {
                         alert("No hay productos en este grupo para enviar.");
                     }
@@ -596,10 +674,9 @@
                 const selectedItems = document.querySelectorAll('#links-container .draggable-image.selected');
                 
                 if (selectedItems.length > 0) {
-                    if (confirm(`¿Estás seguro de que quieres borrar ${selectedItems.length} imagen(es) seleccionada(s)?`)) {
+                    if (confirm(`¿Estás seguro de que quieres borrar ${selectedItems.length} imagen(es) seleccionada(s)?\n\n⚠️ ADVERTENCIA: Esto eliminará los links permanentemente. Si están en grupos, ya no podrás usar "Enviar al principio" correctamente.`)) {
                         selectedItems.forEach(item => {
                             const link = item.getAttribute('data-link');
-                            // Remove from allLinksArray
                             const index = allLinksArray.indexOf(link);
                             if (index > -1) {
                                 allLinksArray.splice(index, 1);
@@ -607,7 +684,7 @@
                             item.remove();
                         });
                         saveState();
-                        alert(`${selectedItems.length} imagen(es) eliminada(s) permanentemente.`);
+                        alert(`${selectedItems.length} imagen(es) eliminada(s) permanentemente.\n\n⚠️ Nota: El orden original se ha modificado.`);
                     }
                 } else {
                     alert("No hay imágenes seleccionadas para borrar.");
